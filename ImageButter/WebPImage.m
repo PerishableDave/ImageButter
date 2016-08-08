@@ -26,6 +26,15 @@ static void free_image_data(void *info, const void *data, size_t size) {
     return self;
 }
 
+- (instancetype)initWithData:(NSData *)data progress:(WebPDecodeProgress)progress {
+    if (self = [super init]) {
+        _decodeProgress = progress;
+        [self decode:data];
+        _isDecoded = YES;
+    }
+    return self;
+}
+
 - (instancetype)initWithData:(NSData*)data async:(WebPDecodeFinished)finished {
     if (self = [super init]) {
         _isDecoded = NO;

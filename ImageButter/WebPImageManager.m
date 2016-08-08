@@ -6,6 +6,7 @@
 //
 
 #import "WebPImageManager.h"
+#import "WebPDecodeOperation.h"
 #import <CommonCrypto/CommonHMAC.h>
 
 static const NSInteger kDefaultCacheMaxCacheAge = 60 * 60 * 24; // 24 hours
@@ -72,10 +73,12 @@ typedef void (^WebPDataFinished)(NSData*);
 @property(nonatomic,strong)NSURLSession *mainSession;
 
 //network session mapping
-@property(nonatomic,strong)NSMutableDictionary *networkDict;
+@property(nonatomic)NSMutableDictionary *networkDict;
 
 //block mappings of running sessions
-@property(nonatomic,strong)NSMutableDictionary *sessions;
+@property(nonatomic)NSMutableDictionary *sessions;
+
+@property(nonatomic)NSOperationQueue *operationQueue;
 
 @end
 
@@ -97,6 +100,8 @@ typedef void (^WebPDataFinished)(NSData*);
         self.mainSession = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration defaultSessionConfiguration] delegate:self delegateQueue:nil];
         self.networkDict = [[NSMutableDictionary alloc] init];
         self.sessions = [[NSMutableDictionary alloc] init];
+        self.operationQueue = [[NSOperationQueue alloc] init];
+        self.operationQueue.maxConcurrentOperationCount = 1;
         // Subscribe to memory warning, so we can clear the image cache on iOS
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(clearCache)
@@ -108,6 +113,7 @@ typedef void (^WebPDataFinished)(NSData*);
 }
 
 - (NSInteger)imageForUrl:(NSURL*)url progress:(WebPImageProgress)progress finished:(WebPImageFinished)finished {
+    
     if(!url) {
         return -1;
     }
@@ -233,11 +239,9 @@ typedef void (^WebPDataFinished)(NSData*);
         progressScale = 1;
         startProgress = 0;
     }
-    WebPImage *img = [[WebPImage alloc] initWithData:data async:^(WebPImage* img){
-        [self completeBlocks:img hash:hash];
-    }];
-    [self.cache setObject:img forKey:hash];
-    img.decodeProgress = ^(CGFloat pro) {
+    
+    WebPDecodeOperationResult *result = [[WebPDecodeOperationResult alloc] init];
+    WebPDecodeOperation *operation = [[WebPDecodeOperation alloc] initWithData:data result:result progress:^(CGFloat pro) {
         CGFloat overallProgress = startProgress + pro/progressScale;
         NSArray *array = self.sessions[hash];
         for(WebPSessionHolder *holder in array) {
@@ -245,7 +249,14 @@ typedef void (^WebPDataFinished)(NSData*);
                 holder.progress(overallProgress);
             }
         }
+    }];
+    
+    operation.completionBlock = ^{
+        [self.cache setObject:result.image forKey:hash];
+        [self completeBlocks:result.image hash:hash];
     };
+    
+    [self.operationQueue addOperation:operation];
 }
 
 - (void)completeBlocks:(WebPImage*)img hash:(NSString*)hash {

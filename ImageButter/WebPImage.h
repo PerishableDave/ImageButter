@@ -44,7 +44,7 @@ typedef void (^WebPDecodeFinished)(WebPImage*);
 typedef void (^WebPDecodeProgress)(CGFloat);
 
 /**
- Create a new WebPImage object with the data. This is done on the *main* thread and not recommend to be used in almost all cases.
+ Create a new WebPImage object with the data. This is done on the thread of the caller and not recommend to be used in almost all cases.
  @param data is the webp data to decode.
  */
 - (instancetype)initWithData:(NSData*)data;
@@ -54,6 +54,13 @@ typedef void (^WebPDecodeProgress)(CGFloat);
  @param image to "convert" to webp.
  */
 - (instancetype)initWithImage:(UIImage*)img;
+
+/**
+ Create a WebPImage object with the data. This is done on the thread of the caller.
+ @param data is the webp data to decode.
+ @param callback
+ */
+- (instancetype)initWithData:(NSData *)data progress:(WebPDecodeProgress)progress;
 
 /**
  Create a new WebPImage object with data. The decoding is done on a background thread with this decode.

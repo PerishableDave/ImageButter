@@ -8,6 +8,7 @@
 #import <UIKit/UIKit.h>
 #import "WebPImage.h"
 #import "WebPImageLoadingProtocol.h"
+#import "WebPImageManager.h"
 
 @interface WebPImageView : UIView
 
