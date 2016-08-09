@@ -94,11 +94,16 @@
 
     self.urlSessionId = [manager imageForUrl:url progress:^(CGFloat imageProgress) {
         if (progress) {
-            progress(imageProgress);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                progress(imageProgress);
+            });
         }
     } finished:^(WebPImage *img) {
         if (finished) {
-            finished(img);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                finished(img);
+            });
+
         }
     }];
 }

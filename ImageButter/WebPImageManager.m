@@ -101,7 +101,7 @@ typedef void (^WebPDataFinished)(NSData*);
         self.networkDict = [[NSMutableDictionary alloc] init];
         self.sessions = [[NSMutableDictionary alloc] init];
         self.operationQueue = [[NSOperationQueue alloc] init];
-        self.operationQueue.maxConcurrentOperationCount = 5;
+        self.operationQueue.maxConcurrentOperationCount = 4;
         // Subscribe to memory warning, so we can clear the image cache on iOS
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(clearCache)
@@ -143,14 +143,12 @@ typedef void (^WebPDataFinished)(NSData*);
             [self finishData:data hash:hash startProgress:0];
         } else {
             [self dataFromNetwork:url progress:^(CGFloat pro) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    NSArray *array = self.sessions[hash];
-                    for(WebPSessionHolder *holder in array) {
-                        if (holder.progress) {
-                            holder.progress(pro/2);
-                        }
+                NSArray *array = self.sessions[hash];
+                for(WebPSessionHolder *holder in array) {
+                    if (holder.progress) {
+                        holder.progress(pro/2);
                     }
-                });
+                }
             } finished:^(NSData *data) {
                 if (data.length > 0 && [WebPImage isValidImage:data]) {
                     NSString *cachePath = [[self cacheDirectory] stringByAppendingPathComponent:hash];
@@ -263,9 +261,7 @@ typedef void (^WebPDataFinished)(NSData*);
     NSArray *array = self.sessions[hash];
     for(WebPSessionHolder *holder in array) {
         if (holder.finished) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                holder.finished(img);
-            });
+            holder.finished(img);
         }
     }
     [self.sessions removeObjectForKey:hash];
@@ -310,22 +306,19 @@ typedef void (^WebPDataFinished)(NSData*);
             NSDate *modifyDate = [attributes fileModificationDate];
             if ([[modifyDate laterDate:expirationDate] isEqualToDate:expirationDate]) {
                 [manager removeItemAtPath:cachePath error:NULL];
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    finished(nil); //no data because it is over the max cache age
-                });
+                finished(nil); //no data because it is over the max cache age
+                return;
             } else {
                 NSData *data = [manager contentsAtPath:cachePath];
                 if (data) {
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        finished(data); //found it an image let the manager know
-                    });
+                    finished(data); //found it an image let the manager know
+                    return;
                 }
-                return;
+
             }
         }
-        dispatch_async(dispatch_get_main_queue(), ^{
-            finished(nil); //no data found on disk
-        });
+
+        finished(nil); //no data found on disk
     });
 }
 
@@ -342,9 +335,7 @@ didCompleteWithError:(NSError *)error {
     NSNumber *taskId = @(task.taskIdentifier);
     WebPNetworkImage *netImage = self.networkDict[taskId];
     if (netImage.finished) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            netImage.finished(netImage.data);
-        });
+        netImage.finished(netImage.data);
     }
     [self.networkDict removeObjectForKey:taskId];
 }
