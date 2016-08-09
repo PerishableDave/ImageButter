@@ -101,7 +101,7 @@ typedef void (^WebPDataFinished)(NSData*);
         self.networkDict = [[NSMutableDictionary alloc] init];
         self.sessions = [[NSMutableDictionary alloc] init];
         self.operationQueue = [[NSOperationQueue alloc] init];
-        self.operationQueue.maxConcurrentOperationCount = 4;
+        self.operationQueue.maxConcurrentOperationCount = 2;
         // Subscribe to memory warning, so we can clear the image cache on iOS
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(clearCache)
