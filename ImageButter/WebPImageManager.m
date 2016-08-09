@@ -80,6 +80,8 @@ typedef void (^WebPDataFinished)(NSData*);
 
 @property(nonatomic)NSOperationQueue *operationQueue;
 
+@property(nonatomic)dispatch_queue_t dispatchQueue;
+
 @end
 
 @implementation WebPImageManager
@@ -102,6 +104,7 @@ typedef void (^WebPDataFinished)(NSData*);
         self.sessions = [[NSMutableDictionary alloc] init];
         self.operationQueue = [[NSOperationQueue alloc] init];
         self.operationQueue.maxConcurrentOperationCount = 2;
+        self.dispatchQueue = dispatch_queue_create("com.dollarshaveclub.imagebutter.queue", DISPATCH_QUEUE_CONCURRENT);
         // Subscribe to memory warning, so we can clear the image cache on iOS
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(clearCache)
@@ -152,7 +155,7 @@ typedef void (^WebPDataFinished)(NSData*);
             } finished:^(NSData *data) {
                 if (data.length > 0 && [WebPImage isValidImage:data]) {
                     NSString *cachePath = [[self cacheDirectory] stringByAppendingPathComponent:hash];
-                    [data writeToFile:cachePath atomically:NO]; 
+                    [data writeToFile:cachePath atomically:NO];
                     [self finishData:data hash:hash startProgress:0.5];
                 } else {
                     [self completeBlocks:nil hash:hash];
@@ -273,7 +276,7 @@ typedef void (^WebPDataFinished)(NSData*);
     if ([[value substringFromIndex:[value length]-1] isEqualToString:@"/"]) {
         value = [value substringToIndex:[value length]-1];
     }
-
+    
     const char *cStr = [value UTF8String];
     unsigned char result[16];
     CC_MD5(cStr, (CC_LONG)strlen(cStr), result);
@@ -297,7 +300,7 @@ typedef void (^WebPDataFinished)(NSData*);
 
 - (void)dataFromCache:(NSString*)hash finished:(WebPDataFinished)finished {
     NSInteger age = -self.maxCacheAge;
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT,0),^{
+    dispatch_async(self.dispatchQueue,^{
         NSString *cachePath = [[self cacheDirectory] stringByAppendingPathComponent:hash];
         NSDate *expirationDate = [NSDate dateWithTimeIntervalSinceNow:age];
         NSFileManager *manager = [NSFileManager defaultManager];
@@ -314,18 +317,20 @@ typedef void (^WebPDataFinished)(NSData*);
                     finished(data); //found it an image let the manager know
                     return;
                 }
-
+                
             }
         }
-
+        
         finished(nil); //no data found on disk
     });
 }
 
 - (void)dataFromNetwork:(NSURL*)url progress:(WebPImageProgress)progress finished:(WebPDataFinished)finished {
-    NSURLSessionDataTask *task = [self.mainSession dataTaskWithURL:url];
-    self.networkDict[@(task.taskIdentifier)] = [[WebPNetworkImage alloc] initWithBlock:finished progress:progress];
-    [task resume];
+    dispatch_barrier_async(self.dispatchQueue, ^{
+        NSURLSessionDataTask *task = [self.mainSession dataTaskWithURL:url];
+        self.networkDict[@(task.taskIdentifier)] = [[WebPNetworkImage alloc] initWithBlock:finished progress:progress];
+        [task resume];
+    });
 }
 
 #pragma mark - NSURLSession delegate methods
@@ -337,17 +342,22 @@ didCompleteWithError:(NSError *)error {
     if (netImage.finished) {
         netImage.finished(netImage.data);
     }
-    [self.networkDict removeObjectForKey:taskId];
+    
+    dispatch_barrier_async(self.dispatchQueue, ^{
+        [self.networkDict removeObjectForKey:taskId];
+    });
 }
 
 - (void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)task
     didReceiveData:(NSData *)data {
-    WebPNetworkImage *netImage = self.networkDict[@(task.taskIdentifier)];
-    [netImage.data appendData:data];
-    if (task.response.expectedContentLength >= netImage.data.length) {
-        CGFloat scale = 1/(CGFloat)task.response.expectedContentLength;
-        netImage.progress(scale*netImage.data.length);
-    }
+    dispatch_barrier_async(self.dispatchQueue, ^{
+        WebPNetworkImage *netImage = self.networkDict[@(task.taskIdentifier)];
+        [netImage.data appendData:data];
+        if (task.response.expectedContentLength >= netImage.data.length) {
+            CGFloat scale = 1/(CGFloat)task.response.expectedContentLength;
+            netImage.progress(scale*netImage.data.length);
+        }
+    });
 }
 
 @end
