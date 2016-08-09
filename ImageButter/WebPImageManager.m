@@ -101,7 +101,7 @@ typedef void (^WebPDataFinished)(NSData*);
         self.networkDict = [[NSMutableDictionary alloc] init];
         self.sessions = [[NSMutableDictionary alloc] init];
         self.operationQueue = [[NSOperationQueue alloc] init];
-        self.operationQueue.maxConcurrentOperationCount = 1;
+        self.operationQueue.maxConcurrentOperationCount = 5;
         // Subscribe to memory warning, so we can clear the image cache on iOS
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(clearCache)
@@ -263,7 +263,9 @@ typedef void (^WebPDataFinished)(NSData*);
     NSArray *array = self.sessions[hash];
     for(WebPSessionHolder *holder in array) {
         if (holder.finished) {
-            holder.finished(img);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                holder.finished(img);
+            });
         }
     }
     [self.sessions removeObjectForKey:hash];
